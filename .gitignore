@@ -1,0 +1,64 @@
+# Xcodeの自動生成ファイルとユーザー設定関連
+.DS_Store
+*.xcuserstate
+*.xcuserdata
+*.xccheckout
+*.xcscmblueprint
+*.xcworkspace/xcuserdata/
+
+# ビルド結果
+DerivedData/
+Build/
+*.o
+*.out
+*.swp
+*.bin
+*.dSYM
+*.tmp
+
+# シンボルファイル
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+*.pbxproj.bak
+!default.mode1v3
+!default.mode2v3
+
+# ブレークポイント情報
+*.xcbkptlist
+
+# Swift Package Managerの依存関係
+.swiftpm/
+Package.resolved
+Package.pins
+
+# Carthageビルド関連
+Carthage/Build/
+
+# CocoaPodsの依存関係
+Pods/
+Podfile.lock
+
+# Fastlaneのログ
+fastlane/report.xml
+fastlane/screenshots
+fastlane/test_output
+
+# Xcodeのログ
+*.log
+*.xcactivitylog
+
+# アーカイブされたデータ
+*.xcarchive
+
+# Simulatorのデータ
+*.simruntime
+*.simdevice
+
+# iOS Simulatorの状態保存
+*.simstate
+
+# directory_structure.txt を無視
+directory_structure.txt
+
