@@ -10,6 +10,7 @@ struct ARViewContainer: UIViewRepresentable {
     let viewModel: MeasurementViewModel
     let wallTargetingVM: WallTargetingViewModel
     let arServices: ARServices
+    let memoryManager: MemoryManagementService
     
     final class Coordinator: NSObject {
         var parent: ARViewContainer
@@ -22,7 +23,11 @@ struct ARViewContainer: UIViewRepresentable {
     
     func makeUIView(context: Context) -> ARSCNView {
         let arView = ARSCNView()
-        let sceneCoordinator = ARSceneCoordinator(self, wallTargetingVM: wallTargetingVM)
+        let sceneCoordinator = ARSceneCoordinator(
+            self,
+            wallTargetingVM: wallTargetingVM,
+            memoryManager: memoryManager
+        )
         context.coordinator.sceneCoordinator = sceneCoordinator
         sceneCoordinator.arViewHolder.view = arView
         

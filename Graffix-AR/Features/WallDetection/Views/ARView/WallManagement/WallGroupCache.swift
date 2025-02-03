@@ -3,12 +3,13 @@ import Foundation
 
 actor WallGroupCache {
     private let cache: BaseCache<[ARPlaneAnchor]>
-    private let cleanupThreshold: TimeInterval = 60  // 1分以上アクセスのないグループを削除
+    private let cleanupThreshold: TimeInterval = 60
     
-    init(maxGroups: Int = 20, cleanupInterval: TimeInterval = 30) {
+    init(maxGroups: Int = 20, cleanupInterval: TimeInterval = 30, memoryManager: MemoryManagementService) {
         self.cache = BaseCache<[ARPlaneAnchor]>(
             maxItems: maxGroups,
-            cleanupInterval: cleanupInterval
+            cleanupInterval: cleanupInterval,
+            memoryManager: memoryManager
         )
     }
     

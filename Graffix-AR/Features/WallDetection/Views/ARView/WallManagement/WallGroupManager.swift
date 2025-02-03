@@ -1,4 +1,3 @@
-
 import ARKit
 
 actor WallGroupManager {
@@ -6,8 +5,8 @@ actor WallGroupManager {
     private let colorManager: WallColorManager
     private var isInitialized = false
     
-    init() {
-        self.cache = WallGroupCache()
+    init(memoryManager: MemoryManagementService) {
+        self.cache = WallGroupCache(memoryManager: memoryManager)
         self.colorManager = WallColorManager()
     }
     

@@ -4,21 +4,35 @@ actor BaseCache<T> {
     let maxItems: Int
     let cleanupInterval: TimeInterval
     private(set) var isInitialized = false
+    private let memoryManager: MemoryManagementService
     
     private var items: [UUID: (item: T, metadata: CacheMetadata)] = [:]
     private var lastCleanupTime: Date
     private var cleanupTask: Task<Void, Never>?
+    private var isMemoryManagementInitialized = false
     
-    init(maxItems: Int, cleanupInterval: TimeInterval) {
+    init(maxItems: Int, cleanupInterval: TimeInterval, memoryManager: MemoryManagementService) {
         self.maxItems = maxItems
         self.cleanupInterval = cleanupInterval
         self.lastCleanupTime = Date()
+        self.memoryManager = memoryManager
     }
     
     func initialize() throws {
         guard !isInitialized else { return }
         isInitialized = true
         startAutoCleanup()
+        
+        // メモリ管理の初期化は別メソッドに分離
+        Task { @MainActor in
+            await setupMemoryManagement()
+        }
+    }
+    
+    private func setupMemoryManagement() async {
+        guard !isMemoryManagementInitialized else { return }
+        await memoryManager.addDelegate(self)
+        isMemoryManagementInitialized = true
     }
     
     func store(_ item: T, forKey key: UUID) async throws {
@@ -120,7 +134,7 @@ actor BaseCache<T> {
     }
     
     func performEmergencyCleanup() async throws {
-        let itemsToRemove = Int(Double(items.count) * 0.2)
+        let itemsToRemove = Int(Double(items.count) * 0.4)  // メモリ圧迫時は40%削減
         let sortedItems = items.sorted { $0.value.metadata.lastAccessed < $1.value.metadata.lastAccessed }
         
         for i in 0..<min(itemsToRemove, sortedItems.count) {
@@ -130,5 +144,34 @@ actor BaseCache<T> {
     
     deinit {
         cleanupTask?.cancel()
+    }
+}
+
+// MARK: - MemoryManagementDelegate
+extension BaseCache: MemoryManagementDelegate {
+    nonisolated func handleMemoryWarning() {
+        Task { [weak self] in
+            try? await self?.performEmergencyCleanup()
+        }
+    }
+    
+    nonisolated func handleMemoryPressure(_ pressure: MemoryPressureLevel) {
+        Task { [weak self] in
+            switch pressure {
+            case .low: break
+            case .medium:
+                try? await self?.performCleanup()
+            case .high, .critical:
+                try? await self?.performEmergencyCleanup()
+            }
+        }
+    }
+    
+    nonisolated func handleSystemMemoryChange(_ status: SystemMemoryStatus) {
+        Task { [weak self] in
+            if status == .warning || status == .critical {
+                try? await self?.performEmergencyCleanup()
+            }
+        }
     }
 }

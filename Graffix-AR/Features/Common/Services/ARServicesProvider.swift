@@ -7,11 +7,14 @@ class ARServicesProvider: ARServices {
     private var coordinator: ARSceneCoordinator?
     
     init(arSession: ARSession = ARSession(),
-         configurationService: ARConfigurationService? = nil) {
+         configurationService: ARConfigurationService? = nil) async {
         self.arSession = arSession
-        self.configurationService = configurationService ?? ARConfigurationServiceImpl(
-            performanceMonitor: DevicePerformanceMonitor()
-        )
+        if let configService = configurationService {
+            self.configurationService = configService
+        } else {
+            let monitor = await DevicePerformanceMonitor.create()
+            self.configurationService = ARConfigurationServiceImpl(performanceMonitor: monitor)
+        }
     }
     
     func setupAR(_ view: ARSCNView) {

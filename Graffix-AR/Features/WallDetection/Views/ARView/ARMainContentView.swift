@@ -1,24 +1,19 @@
 import SwiftUI
 import ARKit
 
-struct ARContentView: View {
-    @StateObject private var viewModel: MeasurementViewModel
-    @StateObject private var wallTargetingVM: WallTargetingViewModel
-    private let arServices: ARServices
-    
-    init(viewModel: MeasurementViewModel,
-         wallTargetingVM: WallTargetingViewModel) {
-        _viewModel = StateObject(wrappedValue: viewModel)
-        _wallTargetingVM = StateObject(wrappedValue: wallTargetingVM)
-        self.arServices = ARServicesProvider()
-    }
+struct ARMainContentView: View {
+    @ObservedObject var viewModel: MeasurementViewModel
+    @ObservedObject var wallTargetingVM: WallTargetingViewModel
+    let arServices: ARServices
+    let memoryManager: MemoryManagementService
     
     var body: some View {
         ZStack {
             ARViewContainer(
                 viewModel: viewModel,
                 wallTargetingVM: wallTargetingVM,
-                arServices: arServices
+                arServices: arServices,
+                memoryManager: memoryManager
             )
             
             ReticuleMark(state: reticuleState)

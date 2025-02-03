@@ -4,28 +4,25 @@ import Combine
 
 @MainActor
 final class DevicePerformanceMonitor: ObservableObject {
-    // MARK: - Public Properties
     @Published private(set) var currentLevel: PerformanceLevel
-    @Published private(set) var systemLoadLevel: SystemLoad
-    
-    // MARK: - Private Properties
-    private var memoryWarningSubscription: AnyCancellable?
-    private var thermalStateSubscription: AnyCancellable?
-    private var updateTimer: Timer?
-    private var recoveryTask: Task<Void, Never>?
+    private let memoryManager: MemoryManagementService
     private let updateInterval: TimeInterval
+    private var updateTimer: Timer?
     
-    // MARK: - Initialization
-    init() {
+    private init(memoryManager: MemoryManagementService) {
+        self.memoryManager = memoryManager
         self.currentLevel = .medium
-        self.systemLoadLevel = .normal
         self.updateInterval = ARConfigurationSettings.Performance.Monitoring.updateInterval
-        
-        setupObservers()
-        startMonitoring()
     }
     
-    // MARK: - Public Methods
+    static func create() async -> DevicePerformanceMonitor {
+        let memoryManager = MemoryManagementServiceImpl()
+        let monitor = DevicePerformanceMonitor(memoryManager: memoryManager)
+        memoryManager.addDelegate(monitor)
+        monitor.startMonitoring()
+        return monitor
+    }
+    
     func startMonitoring() {
         updateTimer?.invalidate()
         updateTimer = Timer.scheduledTimer(
@@ -39,49 +36,13 @@ final class DevicePerformanceMonitor: ObservableObject {
     }
     
     func stopMonitoring() {
-        cleanup()
-    }
-    
-    // MARK: - Private Methods
-    private func cleanup() {
         updateTimer?.invalidate()
         updateTimer = nil
-        recoveryTask?.cancel()
-        recoveryTask = nil
-        memoryWarningSubscription?.cancel()
-        thermalStateSubscription?.cancel()
-        memoryWarningSubscription = nil
-        thermalStateSubscription = nil
-    }
-    
-    private func setupObservers() {
-        memoryWarningSubscription = NotificationCenter.default.publisher(
-            for: UIApplication.didReceiveMemoryWarningNotification
-        )
-        .receive(on: DispatchQueue.main)
-        .sink { [weak self] _ in
-            Task { @MainActor [weak self] in
-                await self?.handleMemoryWarning()
-            }
-        }
-        
-        if #available(iOS 16.0, *) {
-            let processInfo = ProcessInfo.processInfo
-            thermalStateSubscription = NotificationCenter.default.publisher(
-                for: ProcessInfo.thermalStateDidChangeNotification
-            )
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                Task { @MainActor [weak self] in
-                    self?.handleThermalStateChange(processInfo.thermalState)
-                }
-            }
-        }
     }
     
     private func updatePerformanceMetrics() async {
         let baseLevel = evaluateHardwareCapabilities()
-        let adjustedLevel = adjustForSystemConditions(baseLevel)
+        let adjustedLevel = await adjustForSystemConditions(baseLevel)
         
         if currentLevel != adjustedLevel {
             currentLevel = adjustedLevel
@@ -94,7 +55,6 @@ final class DevicePerformanceMonitor: ObservableObject {
         let processorThresholds = ARConfigurationSettings.Performance.Thresholds.processor
         let memoryThresholds = ARConfigurationSettings.Performance.Thresholds.memory
         
-        // プロセッサ数による基本評価
         let baseLevel: PerformanceLevel
         switch processorCount {
         case processorThresholds.high...: baseLevel = .high
@@ -102,7 +62,6 @@ final class DevicePerformanceMonitor: ObservableObject {
         default: baseLevel = .low
         }
         
-        // メモリ容量による調整
         let memoryGB = Double(totalMemory) / 1_000_000_000
         if memoryGB < memoryThresholds.minimum && baseLevel != .low {
             return .low
@@ -110,14 +69,13 @@ final class DevicePerformanceMonitor: ObservableObject {
             return .medium
         }
         
-        // デバイス特性による調整
         let deviceSettings = ARConfigurationSettings.Device.getSpecificSettings()
         return deviceSettings.preferHighPerformance ? baseLevel : min(baseLevel, .medium)
     }
     
-    private func adjustForSystemConditions(_ baseLevel: PerformanceLevel) -> PerformanceLevel {
-        switch systemLoadLevel {
-        case .high:
+    private func adjustForSystemConditions(_ baseLevel: PerformanceLevel) async -> PerformanceLevel {
+        switch memoryManager.systemMemoryStatus {
+        case .warning:
             return baseLevel == .high ? .medium : .low
         case .critical:
             return .low
@@ -126,41 +84,44 @@ final class DevicePerformanceMonitor: ObservableObject {
         }
     }
     
-    private func handleMemoryWarning() async {
-        systemLoadLevel = .high
-        
-        recoveryTask?.cancel()
-        recoveryTask = Task { [weak self] in
-            try? await Task.sleep(
-                nanoseconds: UInt64(ARConfigurationSettings.Performance.Monitoring.thermalRecoveryDelay * 1_000_000_000)
-            )
-            guard let self = self, !Task.isCancelled else { return }
-            self.resetSystemLoad()
+    deinit {
+        updateTimer?.invalidate()
+        updateTimer = nil
+    }
+}
+
+extension DevicePerformanceMonitor: MemoryManagementDelegate {
+    nonisolated func handleMemoryWarning() {
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            let adjustedLevel = await self.adjustForSystemConditions(self.currentLevel)
+            if self.currentLevel != adjustedLevel {
+                self.currentLevel = adjustedLevel
+            }
         }
     }
     
-    private func resetSystemLoad() {
-        if systemLoadLevel == .high {
-            systemLoadLevel = .normal
+    nonisolated func handleMemoryPressure(_ pressure: MemoryPressureLevel) {
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            let adjustedLevel = await self.adjustForSystemConditions(self.currentLevel)
+            if self.currentLevel != adjustedLevel {
+                self.currentLevel = adjustedLevel
+            }
         }
     }
     
-    @available(iOS 16.0, *)
-    private func handleThermalStateChange(_ state: ProcessInfo.ThermalState) {
-        switch state {
-        case .nominal:
-            systemLoadLevel = .normal
-        case .fair, .serious:
-            systemLoadLevel = .high
-        case .critical:
-            systemLoadLevel = .critical
-        @unknown default:
-            systemLoadLevel = .normal
+    nonisolated func handleSystemMemoryChange(_ status: SystemMemoryStatus) {
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            let adjustedLevel = await self.adjustForSystemConditions(self.currentLevel)
+            if self.currentLevel != adjustedLevel {
+                self.currentLevel = adjustedLevel
+            }
         }
     }
 }
 
-// MARK: - Supporting Types
 extension DevicePerformanceMonitor {
     enum PerformanceLevel: Int, Comparable {
         case low = 0
@@ -170,11 +131,5 @@ extension DevicePerformanceMonitor {
         static func < (lhs: PerformanceLevel, rhs: PerformanceLevel) -> Bool {
             lhs.rawValue < rhs.rawValue
         }
-    }
-    
-    enum SystemLoad {
-        case normal
-        case high
-        case critical
     }
 }

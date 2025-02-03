@@ -5,8 +5,10 @@ actor PlaneNodeCache {
     private let unusedThreshold: TimeInterval
     private let emergencyThreshold: Int
     
-    init(maxNodes: Int = 30, cleanupInterval: TimeInterval = 15) {
-        self.cache = BaseCache<SCNNode>(maxItems: maxNodes, cleanupInterval: cleanupInterval)
+    init(maxNodes: Int = 30, cleanupInterval: TimeInterval = 15, memoryManager: MemoryManagementService) {
+        self.cache = BaseCache<SCNNode>(maxItems: maxNodes,
+                                        cleanupInterval: cleanupInterval,
+                                        memoryManager: memoryManager)
         self.unusedThreshold = 30
         self.emergencyThreshold = Int(Double(maxNodes) * 0.9)
     }

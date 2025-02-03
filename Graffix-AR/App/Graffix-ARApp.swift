@@ -1,10 +1,10 @@
 import SwiftUI
 
 @main
-struct ARtestApp: App {
+struct GraffixARApp: App {
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            MainView()
         }
     }
 }

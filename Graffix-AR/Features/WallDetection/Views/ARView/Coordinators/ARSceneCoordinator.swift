@@ -13,10 +13,12 @@ class ARSceneCoordinator: NSObject, ARSCNViewDelegate, ARSessionDelegate {
     private let wallTargetingVM: WallTargetingViewModel
     private var intersectionCheckTask: Task<Void, Never>?
     
-    init(_ parent: ARViewContainer, wallTargetingVM: WallTargetingViewModel) {
+    init(_ parent: ARViewContainer,
+        wallTargetingVM: WallTargetingViewModel,
+        memoryManager: MemoryManagementService) {
         self.parent = parent
-        self.wallGroupManager = WallGroupManager()
-        self.planeNodeCache = PlaneNodeCache()
+        self.wallGroupManager = WallGroupManager(memoryManager: memoryManager)
+        self.planeNodeCache = PlaneNodeCache(memoryManager: memoryManager)
         self.wallTargetingVM = wallTargetingVM
         super.init()
         
