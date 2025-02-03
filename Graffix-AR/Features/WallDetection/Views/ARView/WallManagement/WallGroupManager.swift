@@ -1,34 +1,45 @@
+
 import ARKit
 
 actor WallGroupManager {
     private let cache: WallGroupCache
     private let colorManager: WallColorManager
+    private var isInitialized = false
     
     init() {
         self.cache = WallGroupCache()
         self.colorManager = WallColorManager()
-        Task {
-            await cache.initialize()
-        }
+    }
+    
+    func initialize() async throws {
+        if isInitialized { return }
+        try await cache.initialize()
+        isInitialized = true
     }
     
     func addWall(_ wall: ARPlaneAnchor) async throws -> UUID {
+        if !isInitialized {
+            try await initialize()
+        }
+        
         guard wall.alignment == .vertical else {
             throw AppError.ar(.wallGroupError("垂直な壁面のみ追加できます"))
         }
         
+        // 既存グループとの互換性チェック
         let groups = await cache.getAllGroups()
         for (groupID, anchors) in groups {
             if await isWallCompatible(wall, with: anchors) {
                 var updatedAnchors = anchors
                 updatedAnchors.append(wall)
-                await cache.store(groupID: groupID, anchors: updatedAnchors)
+                try await cache.store(groupID: groupID, anchors: updatedAnchors)
                 return groupID
             }
         }
         
+        // 新しいグループの作成
         let newGroupID = UUID()
-        await cache.store(groupID: newGroupID, anchors: [wall])
+        try await cache.store(groupID: newGroupID, anchors: [wall])
         await colorManager.assignColor(for: newGroupID)
         return newGroupID
     }
@@ -42,21 +53,23 @@ actor WallGroupManager {
                     await cache.remove(groupID: groupID)
                     await colorManager.releaseColor(for: groupID)
                 } else {
-                    await cache.store(groupID: groupID, anchors: updatedAnchors)
+                    try? await cache.store(groupID: groupID, anchors: updatedAnchors)
                 }
                 return
             }
         }
     }
     
+    func getColor(for groupID: UUID) async -> UIColor {
+        await colorManager.getColor(for: groupID)
+    }
+    
     func isWallCompatible(_ wall: ARPlaneAnchor, with groupWalls: [ARPlaneAnchor]) async -> Bool {
         guard wall.alignment == .vertical else { return false }
         
         let wallData = wall.planeNormalAndPosition
-        
         for groupWall in groupWalls {
             let groupWallData = groupWall.planeNormalAndPosition
-            
             let normalDifference = wallData.normal.distance(to: groupWallData.normal)
             let positionDifference = wallData.position.distance(to: groupWallData.position)
             
@@ -65,10 +78,6 @@ actor WallGroupManager {
             }
         }
         return false
-    }
-    
-    func getColor(for groupID: UUID) async -> UIColor {
-        return await colorManager.getColor(for: groupID)
     }
     
     func isInSameGroup(_ wall1: ARPlaneAnchor, as wall2: ARPlaneAnchor) async -> Bool {
