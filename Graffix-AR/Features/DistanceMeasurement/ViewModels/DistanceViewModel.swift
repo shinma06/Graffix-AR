@@ -6,9 +6,10 @@ final class DistanceViewModel: BaseViewModel {
     private let sensorManager: SensorManager
     private let arSession: ARSession
     
-    init(sensorManager: SensorManager = SensorManager(),
+    init(memoryManager: MemoryManagementService,
          arSession: ARSession = ARSession(),
-         errorHandler: ErrorHandling = AppErrorHandler.shared) {
+         errorHandler: ErrorHandling = AppErrorHandler.shared) async {
+        let sensorManager = await SensorManager.create(memoryManager: memoryManager)
         self.sensorManager = sensorManager
         self.arSession = arSession
         super.init(errorHandler: errorHandler)

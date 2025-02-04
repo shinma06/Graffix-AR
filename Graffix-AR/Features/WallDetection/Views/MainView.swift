@@ -36,12 +36,13 @@ private struct ARContentContainer: View {
             
             guard let arServices = self.arServices else { return }
             
-            self.viewModel = MeasurementViewModel(
-                distanceViewModel: DistanceViewModel(),
+            self.viewModel = await MeasurementViewModel(
+                distanceViewModel: nil,  // デフォルトのViewModelが生成されます
                 wallDetectionViewModel: WallDetectionViewModel(
                     wallDetectionService: WallDetectionService(arSession: ARSession())
                 ),
-                arServices: arServices
+                arServices: arServices,
+                memoryManager: memoryManager
             )
         }
     }

@@ -14,12 +14,20 @@ final class MeasurementViewModel: BaseViewModel {
     var trackingState: ARCamera.TrackingState? { wallDetectionViewModel.trackingState }
     var detectionMode: WallDetectionMode { wallDetectionViewModel.detectionMode }
     
-    init(distanceViewModel: DistanceViewModel = DistanceViewModel(),
+    init(distanceViewModel: DistanceViewModel? = nil,
          wallDetectionViewModel: WallDetectionViewModel = WallDetectionViewModel(
             wallDetectionService: WallDetectionService(arSession: ARSession())),
          arServices: ARServices,
-         errorHandler: ErrorHandling = AppErrorHandler.shared) {
-        self.distanceViewModel = distanceViewModel
+         memoryManager: MemoryManagementService,
+         errorHandler: ErrorHandling = AppErrorHandler.shared) async {
+        if let distanceVM = distanceViewModel {
+            self.distanceViewModel = distanceVM
+        } else {
+            self.distanceViewModel = await DistanceViewModel(
+                memoryManager: memoryManager,
+                errorHandler: errorHandler
+            )
+        }
         self.wallDetectionViewModel = wallDetectionViewModel
         self.arServices = arServices
         self.detectedWalls = []

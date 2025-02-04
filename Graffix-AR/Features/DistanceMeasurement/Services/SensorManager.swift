@@ -6,11 +6,12 @@ protocol SensorManagerDelegate: AnyObject {
     func sensorManager(_ manager: SensorManager, didFailWithError error: Error)
 }
 
-class SensorManager {
+class SensorManager: MemoryManagementDelegate {
     weak var delegate: SensorManagerDelegate?
     private var measurementTask: Task<Void, Never>?
     private var streamContinuation: AsyncStream<DistanceData>.Continuation?
     private var isRunning: Bool = false
+    private let memoryManager: MemoryManagementService
     
     private let updateInterval: TimeInterval = 1.0 / 30.0
     private let batchSize = 5
@@ -28,9 +29,15 @@ class SensorManager {
     private var lastSuccessfulMeasurement: Date?
     private var isCalibrating = false
     
-    init() {
+    private init(memoryManager: MemoryManagementService) {
+        self.memoryManager = memoryManager
         self.dynamicUpdateInterval = updateInterval
-        setupMemoryWarningObserver()
+    }
+    
+    static func create(memoryManager: MemoryManagementService) async -> SensorManager {
+        let manager = SensorManager(memoryManager: memoryManager)
+        await memoryManager.addDelegate(manager)
+        return manager
     }
     
     func distanceStream() -> AsyncStream<DistanceData> {
@@ -148,20 +155,6 @@ class SensorManager {
         try await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
     }
     
-    private func setupMemoryWarningObserver() {
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handleMemoryWarning),
-            name: UIApplication.didReceiveMemoryWarningNotification,
-            object: nil
-        )
-    }
-    
-    @objc private func handleMemoryWarning() {
-        systemLoadLevel = maxSystemLoadLevel
-        measurementBuffer.removeAll(keepingCapacity: true)
-    }
-    
     private func initializeSensor() async throws {
         if arc4random_uniform(100) < 5 {
             throw AppError.sensor(.initializationFailed)
@@ -206,8 +199,39 @@ class SensorManager {
         }
     }
     
+    // MARK: - MemoryManagementDelegate
+    
+    nonisolated func handleMemoryWarning() {
+        Task { @MainActor [weak self] in
+            self?.systemLoadLevel = self?.maxSystemLoadLevel ?? 0
+            self?.measurementBuffer.removeAll(keepingCapacity: true)
+        }
+    }
+    
+    nonisolated func handleMemoryPressure(_ pressure: MemoryPressureLevel) {
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            switch pressure {
+            case .low:
+                self.systemLoadLevel = 0
+            case .medium:
+                self.systemLoadLevel = self.maxSystemLoadLevel / 2
+            case .high, .critical:
+                self.systemLoadLevel = self.maxSystemLoadLevel
+                self.measurementBuffer.removeAll(keepingCapacity: true)
+            }
+        }
+    }
+    
+    nonisolated func handleSystemMemoryChange(_ status: SystemMemoryStatus) {
+        Task { @MainActor [weak self] in
+            if status != .normal {
+                self?.measurementBuffer.removeAll(keepingCapacity: true)
+            }
+        }
+    }
+    
     deinit {
-        NotificationCenter.default.removeObserver(self)
         stopMeasuring()
     }
 }
